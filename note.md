@@ -735,9 +735,104 @@ func main() {
 		return
 	}
 	fmt.Printf("recv%v addr%v count%v\n",string(data[:n]),remoteAddr,n)
-	
+
 }
 ```
+### TCP黏包
+
+```go
+//服务端
+//socket_stick/server/main.go
+package main
+
+import (
+	"bufio"
+	"cmd/compile/internal/syntax"
+	"cmd/go/internal/fmtcmd"
+	"fmt"
+	"io"
+	"net"
+)
+
+func process(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	var buf := [1024]byte
+	for {
+		n, err := reader.Read(buf[:])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Println("read from client failed , err", err)
+			break
+		}
+		recvStr := string(buf[:n])
+		fmt.Println("read from client data :", recvStr)
+	}
+}
+func main() {
+	listen, err := net.Listen("tcp", "127.0.0.1:30000")
+	if err != nil {
+		fmt.Println("listen failed ,err", err)
+		return
+	}
+	defer listen.Close()
+	for true {
+		conn, err := listen.Accept()
+		if err != nil {
+			fmt.Println("accept failed , err",err)
+			continue
+		}
+		go process(conn)
+	}
+}
+```
+
+```go
+//客户端
+//socket_stick/client/main.go
+package main
+
+import (
+	"fmt"
+	"net"
+)
+
+func main() {
+	conn, err := net.Dial("tcp", "127.0.0.1:30000")
+	if err != nil {
+		fmt.Println("dial failed , err ", err)
+		return
+	}
+	defer conn.Close()
+	for i := 0; i < 20; i++ {
+		msg := `Hello How are you`
+		conn.Write([]byte(msg))
+	}
+}
+```
+这样的代码编译后运行先启动服务端再启动客户端 运行结果如下
+```text
+read from client data : Hello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are youHello How are you
+```
+#### 为什么会黏包
+tcp是流式数据，在保持长链接的时候可以进行多次的收发
+黏包会发生在发送端也会发生在接收端
+1. 由nagle算法造成的发送端黏包：nagle算法是一种改善网络传输效率的算法。简单来说就是当我梦提交一段数据给TCP发送时，TCP并不立刻发送这段数据，而是等待一小段时间看看等待期间是否还有要发送的数据，若有则会一次把这两段数据发送出去。
+2. 接收端接受不及时造成的接收端黏包：TCP会把接收到的数据存在自己的缓冲区域内，然后通知应用层取数据。当应用层由于某些原因不能及时的把TCP的数据取出来，就会造成TCP缓冲区中存放了几段数据。
+
+#### 怎么解决黏包
+出现黏包主要在于接收方不确定传进来的数据大小，因此我们可以对数据包进行封包和拆包操作。
+
+封包就是给一段数据加上包头（过滤非法包时封包会加入包尾内容）。包头部分长度是固定的，并且它存储了包体的长度，根据报头长度固定以及包头中含有胞体长度的变量，就能够正确拆解出一个完整的数据包。
+
+我们可以自己定义一个协议，比如数据包的前四个字节为包头，里面存储的是发送数据的长度
+```go
+
+```
+
+
 
 ### HTTP编程
 
@@ -779,7 +874,7 @@ func myHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("header",r.Header)
 	fmt.Println("body",r.Body)
 	//回复
-    w.Write([]byte("LESS NOTE"))
+	w.Write([]byte("LESS NOTE"))
 }
 ```
 
