@@ -829,12 +829,128 @@ tcp是流式数据，在保持长链接的时候可以进行多次的收发
 
 我们可以自己定义一个协议，比如数据包的前四个字节为包头，里面存储的是发送数据的长度
 ```go
+package proto
 
+import (
+	"bufio"
+	"bytes"
+	"encoding/binary"
+)
+
+// Encode 编码
+func Encode(message string) ([]byte, error) {
+	//读取消息的长度，转换成int32类型（占四个字节）
+	var length = int32(len(message))
+	var pkg = new(bytes.Buffer)
+	//写入消息头
+	err := binary.Write(pkg, binary.LittleEndian, length)
+	if err != nil {
+		return nil, err
+	}
+	//写入消息实体
+	err = binary.Write(pkg, binary.LittleEndian, []byte(message))
+	if err != nil {
+		return nil, err
+	}
+	return pkg.Bytes(), nil
+}
+
+// Decode 解码
+func Decode(reader *bufio.Reader) (string, error) {
+	//读取消息的长度
+	lengthByte, _ := reader.Peek(4)
+	lengthBuff := bytes.NewBuffer(lengthByte)
+	var length int32
+	err := binary.Read(lengthBuff, binary.LittleEndian, &length)
+	if err != nil {
+		return "", err
+	}
+	//Buffered返回缓冲中现有的可读取的字节数。
+	if int32(reader.Buffered()) <= length+4 {
+		return "", err
+	}
+	//读取真正的消息数据
+	pack := make([]byte, int(length+4))
+	_, err = reader.Read(pack)
+	if err != nil {
+		return "", err
+	}
+	return string(pack[4:]), nil
+}
+```
+```go
+package main
+
+import (
+	"LESS/02_network/01_tcp_stick/proto"
+	"bufio"
+	"fmt"
+	"io"
+	"net"
+)
+
+// 服务端
+func process(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	for true {
+		msg, err := proto.Decode(reader)
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			fmt.Println("decode msg failed , err:", err)
+			return
+		}
+		fmt.Println("收到client发来的信息：", msg)
+	}
+}
+func main() {
+	listen, err := net.Listen("tcp", "127.0.0.1:30000")
+	if err != nil {
+		fmt.Println("listen failed ,err:", err)
+		return
+	}
+	defer listen.Close()
+	for {
+		conn, err := listen.Accept()
+		if err != nil {
+			fmt.Println("accept failed ,err:", err)
+			continue
+		}
+		go process(conn)
+	}
+}
+```
+```go
+package main
+
+import (
+	"LESS/02_network/01_tcp_stick/proto"
+	"fmt"
+	"net"
+)
+//客户端
+func main() {
+	conn, err := net.Dial("tcp", "127.0.0.1:30000")
+	if err != nil {
+		fmt.Println("dial failed ,err:", err)
+		return
+	}
+	defer conn.Close()
+	for i := 0; i < 20; i++ {
+		msg := `Hello,Hello.How are you`
+		data, err := proto.Encode(msg)
+		if err != nil {
+			fmt.Println("encode failed ,err:", err)
+			return
+		}
+		conn.Write(data)
+	}
+}
 ```
 
-
-
-### HTTP编程
+## HTTP编程
 
 - web服务器的工作流程可以简单地归纳
     - 客户机通过TCP/IP协议建立到服务器的TCP连接
@@ -913,6 +1029,14 @@ func main() {
 	}
 }
 ```
+## websocket编程
+### websocket编程是什么
+- websocket是一种在单个TCP连接上进行全双工通信的协议
+- websocket使得客户端和服务器之间的数据交换变得更简单，允许服务端主动向客户端推送数据
+- 在WebSocket API中，浏览器和服务器只需完成一次握手，两者之间就可以创建持久性的连接，并进行双向数据传输
+- 需要安装第三方包
 
 
+    go get -u -v github.com/gorilla/websocket
 
+### 聊天室
