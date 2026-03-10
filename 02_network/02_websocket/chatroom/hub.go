@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 var h = hub{
 	c: make(map[*connection]bool),
 	u: make(chan *connection),
@@ -20,6 +22,24 @@ func (h hub) run() {
 		case c := <-h.r:
 			h.c[c] = true
 			c.data.Ip = c.ws.RemoteAdrr().String()
+			c.data.Type = "handshake"
+			c.data.UserList = user_list
+			data_b, _ := json.Marshal(c.data)
+			c.sc <- data_b
+		case c := <-h.u:
+			if _, ok := h.c[c]; ok {
+				delete(h.c, c)
+				close(c.sc)
+			}
+		case c := <-h.b:
+			for c := range h.c {
+				select {
+				case c.sc <- data:
+				default:
+					delete(h.c, c)
+					close(c.sc)
+				}
+			}
 		}
 	}
 }
