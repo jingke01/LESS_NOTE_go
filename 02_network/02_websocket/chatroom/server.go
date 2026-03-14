@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	router := mux.NewRouter()
+	router := mux.NewRouter() //router新建一个路由
 	go h.run()
 	router.HandleFunc("/ws", myws)
 	err := http.ListenAndServe("127.0.0.1:8080", router)

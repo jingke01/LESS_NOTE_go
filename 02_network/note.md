@@ -473,7 +473,7 @@ Suite），正是这一些协议规定了电脑如何连接和组网。我们理
 
 互联网的逻辑实现别分为好几层。每一层都有自己的功能，就像建筑物一样每一层都靠下一层支撑。用户接触到的只是最上面那一层，根本不会感觉到下面的几层。要理解互联网就需要自下而上理解每一层实现的功能。
 
-![OSI七层模型](image/OSI.png)
+![OSI七层模型](../image/OSI.png)
 
 #### 物理层
 
@@ -1040,3 +1040,580 @@ func main() {
     go get -u -v github.com/gorilla/websocket
 
 ### 聊天室
+
+```go
+//server.go
+package main
+
+import (
+	"fmt"
+	"github.com/gorilla/mux"
+	"net/http"
+)
+
+func main() {
+	router := mux.NewRouter() //router新建一个路由
+	go h.run()
+	router.HandleFunc("/ws", myws)
+	err := http.ListenAndServe("127.0.0.1:8080", router)
+	if err != nil {
+		fmt.Println("err:", err)
+	}
+}
+```
+```go
+//hub.go
+package main
+
+import "encoding/json"
+
+var h = hub{
+  c: make(map[*connection]bool),
+  u: make(chan *connection),
+  b: make(chan []byte),
+  r: make(chan *connection),
+}
+
+type hub struct {
+  c map[*connection]bool
+  b chan []byte
+  r chan *connection
+  u chan *connection
+}
+
+func (h hub) run() {
+  for {
+    select {
+    case c := <-h.r:
+      h.c[c] = true
+      c.data.Ip = c.ws.RemoteAddr().String()
+      c.data.Type = "handshake"
+      c.data.UserList = user_list
+      data_b, _ := json.Marshal(c.data)
+      c.sc <- data_b
+    case c := <-h.u:
+      if _, ok := h.c[c]; ok {
+        delete(h.c, c)
+        close(c.sc)
+      }
+    case data := <-h.b:
+      for c := range h.c {
+        select {
+        case c.sc <- data:
+        default:
+          delete(h.c, c)
+          close(c.sc)
+        }
+      }
+    }
+  }
+}
+```
+```go
+//data.go
+package main
+
+type Data struct {
+	Ip       string   `json:"ip"`
+	User     string   `json:"user"`
+	From     string   `json:"from"`
+	Type     string   `json:"type"`
+	Content  string   `json:"content"`
+	UserList []string `json:"user_list"`
+}
+```
+```go
+//connection.go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/gorilla/websocket"
+	"net/http"
+)
+
+type connection struct {
+	ws   *websocket.Conn
+	sc   chan []byte
+	data *Data
+}
+
+var wu = &websocket.Upgrader{
+	ReadBufferSize:  512,
+	WriteBufferSize: 512,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func myws(w http.ResponseWriter, r *http.Request) {
+	ws, err := wu.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	c := &connection{
+		ws:   ws,
+		sc:   make(chan []byte, 256),
+		data: &Data{},
+	}
+	h.r <- c
+	go c.writer()
+	c.reader()
+	defer func() {
+		c.data.Type = "logout"
+		user_list = del(user_list, c.data.User)
+		c.data.Content = c.data.User
+		data_b, _ := json.Marshal(c.data)
+		h.b <- data_b
+		h.r <- c
+	}()
+}
+func (c *connection) writer() {
+	for message := range c.sc {
+		c.ws.WriteMessage(websocket.TextMessage, message)
+	}
+	c.ws.Close()
+}
+
+var user_list = []string{}
+
+func (c *connection) reader() {
+	for {
+		_, message, err := c.ws.ReadMessage()
+		if err != nil {
+			h.r <- c
+			break
+		}
+		json.Unmarshal(message, &c.data)
+		switch c.data.Type {
+		case "login":
+			c.data.User = c.data.Content
+			c.data.From = c.data.User
+			user_list = append(user_list, c.data.User)
+			c.data.UserList = user_list
+			data_b, _ := json.Marshal(c.data)
+			h.b <- data_b
+		case "user":
+			c.data.Type = "user"
+			data_b, _ := json.Marshal(c.data)
+			h.b <- data_b
+		case "logout":
+			c.data.Type = "logout"
+			user_list = del(user_list, c.data.User)
+			data_b, _ := json.Marshal(c.data)
+			h.b <- data_b
+			h.r <- c
+		default:
+			fmt.Println("============dafault===============")
+		}
+	}
+}
+func del(slice []string, user string) []string {
+	count := len(slice)
+	if count == 0 {
+		return slice
+	}
+	if count == 1 && slice[0] == user {
+		return []string{}
+	}
+	var n_slice = []string{}
+	for i := range slice {
+		if slice[i] == user && i == count {
+			return slice[:count]
+		} else if slice[i] == user {
+			n_slice = append(slice[:i], slice[i+1:]...)
+			break
+		}
+	}
+	fmt.Println(n_slice)
+	return n_slice
+}
+```
+//local.html让ai写的
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jinge聊天室</title>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --danger-color: #ff4d4f;
+            --bg-color: #f4f7f9;
+            --sidebar-bg: #ffffff;
+            --chat-bg: #ffffff;
+            --text-main: #333;
+            --text-muted: #888;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 1000px;
+            height: 85vh;
+            background: white;
+            display: flex;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid #f0f0f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--text-main);
+        }
+
+        .user-count {
+            color: var(--primary-color);
+            font-size: 13px;
+            font-weight: normal;
+        }
+
+        #user_list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .user-item {
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            background: #f9f9f9;
+            font-size: 14px;
+            color: #555;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .user-item:hover {
+            background: #f0f7ff;
+            border-color: #e0eaff;
+        }
+
+        /* 主聊天区 */
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--chat-bg);
+        }
+
+        .chat-header {
+            padding: 15px 25px;
+            border-bottom: 1px solid #f0f0f0;
+            text-align: center;
+            font-weight: bold;
+            color: #444;
+        }
+
+        #msg_list {
+            flex: 1;
+            padding: 25px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #fafafa;
+        }
+
+        /* 消息气泡 */
+        .msg-wrapper {
+            max-width: 85%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .msg-bubble {
+            padding: 12px 16px;
+            border-radius: 15px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }
+
+        .msg-system {
+            align-self: center;
+            background: rgba(0,0,0,0.05);
+            color: var(--text-muted);
+            font-size: 12px;
+            border-radius: 20px;
+            padding: 4px 15px;
+            margin: 10px 0;
+        }
+
+        .msg-user { align-self: flex-start; }
+        .msg-user .msg-bubble {
+            background: white;
+            color: var(--text-main);
+            border: 1px solid #eaeaea;
+            border-bottom-left-radius: 2px;
+        }
+
+        .msg-me { align-self: flex-end; }
+        .msg-me .msg-bubble {
+            background: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .sender-name {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            margin-left: 4px;
+        }
+
+        /* 输入区域 */
+        .input-area {
+            padding: 20px 25px;
+            background: white;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            gap: 12px;
+        }
+
+        #msg_box {
+            flex: 1;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 12px 15px;
+            resize: none;
+            outline: none;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+            background: #fcfcfc;
+        }
+
+        #msg_box:focus {
+            border-color: var(--primary-color);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .btn {
+            border: none;
+            padding: 8px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-send {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-send:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,122,255,0.3); }
+
+        .btn-quit {
+            background: #fff0f0;
+            color: var(--danger-color);
+            border: 1px solid #ffd5d5;
+            font-size: 12px;
+        }
+
+        .btn-quit:hover {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="main_app">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div>
+                <h3>在线列表</h3>
+                <span class="user-count">当前 <span id="user_num">0</span> 人在线</span>
+            </div>
+            <button class="btn btn-quit" onclick="quit()">退出</button>
+        </div>
+        <div id="user_list">
+        </div>
+    </div>
+
+    <div class="chat-main">
+        <div class="chat-header" id="chat_title">演示聊天室</div>
+        <div id="msg_list"></div>
+        <div class="input-area">
+            <textarea id="msg_box" rows="1" placeholder="输入消息..." onkeydown="confirm(event)"></textarea>
+            <button class="btn btn-send" onclick="send()">发送</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    var uname = prompt('请输入用户名', '用户' + uuid(4, 10));
+    if (!uname) uname = '游客' + uuid(3, 10);
+
+    document.getElementById('chat_title').innerText = "你好, " + uname;
+
+    var ws = new WebSocket("ws://127.0.0.1:8080/ws");
+
+    ws.onopen = function () {
+        listMsg("系统", "成功连接到服务器", 'system');
+    };
+
+    ws.onmessage = function (e) {
+        var msg = JSON.parse(e.data);
+        switch (msg.type) {
+            case 'handshake':
+                sendMsg({'type': 'login', 'content': uname});
+                break;
+            case 'login':
+            case 'logout':
+                dealUser(msg.content, msg.type, msg.user_list);
+                break;
+            case 'system':
+                listMsg("系统", msg.content, 'system');
+                break;
+            case 'user':
+                var type = (msg.from === uname) ? 'me' : 'user';
+                listMsg(msg.from, msg.content, type);
+                break;
+        }
+    };
+
+    ws.onclose = function() {
+        listMsg("系统", "连接已断开", 'system');
+    };
+
+    ws.onerror = function () {
+        listMsg("系统", "通信错误", 'system');
+    };
+
+    function confirm(event) {
+        if (event.keyCode === 13 && !event.shiftKey) {
+            event.preventDefault();
+            send();
+        }
+    }
+
+    function send() {
+        var msg_box = document.getElementById("msg_box");
+        var content = msg_box.value.trim();
+        if (!content) return;
+
+        sendMsg({'content': content, 'type': 'user'});
+        msg_box.value = '';
+    }
+
+    function listMsg(sender, data, type) {
+        var msg_list = document.getElementById("msg_list");
+        var wrapper = document.createElement("div");
+        wrapper.className = "msg-wrapper " + (type === 'system' ? 'msg-system' : (type === 'me' ? 'msg-me' : 'msg-user'));
+
+        if (type !== 'system') {
+            var nameDiv = document.createElement("div");
+            nameDiv.className = "sender-name";
+            nameDiv.innerText = sender;
+            wrapper.appendChild(nameDiv);
+        }
+
+        var bubble = document.createElement("div");
+        bubble.className = "msg-bubble";
+        bubble.innerText = data;
+        wrapper.appendChild(bubble);
+
+        msg_list.appendChild(wrapper);
+        msg_list.scrollTop = msg_list.scrollHeight;
+    }
+
+    function dealUser(user_name, type, name_list) {
+        var user_list_div = document.getElementById("user_list");
+        var user_num = document.getElementById("user_num");
+
+        user_list_div.innerHTML = '';
+        if (name_list) {
+            name_list.forEach(function(name) {
+                var u = document.createElement("div");
+                u.className = "user-item";
+                u.innerText = name;
+                user_list_div.appendChild(u);
+            });
+            user_num.innerHTML = name_list.length;
+        }
+
+        var change = type === 'login' ? '上线' : '下线';
+        listMsg("系统", user_name + ' 已' + change, 'system');
+    }
+
+    function quit() {
+        if (confirm("确定要退出聊天室吗？")) {
+            ws.close();
+            document.getElementById('main_app').innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; gap:20px;">
+                    <div style="font-size:64px;">👋</div>
+                    <h2 style="color:#333;">您已离开聊天室</h2>
+                    <button class="btn btn-send" onclick="location.reload()">重新进入</button>
+                </div>
+            `;
+        }
+    }
+
+    function sendMsg(msg) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg));
+        }
+    }
+
+    function uuid(len, radix) {
+        var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split('');
+        var uuid = [];
+        radix = radix || chars.length;
+        for (var i = 0; i < len; i++) uuid[i] = chars[0 | Math.random() * radix];
+        return uuid.join('');
+    }
+</script>
+</body>
+</html>
+```
+在02_network/02_websocket/chatroom路径下运行
+
+```shell
+go run server.go hub.go data.go connection.go
+```
+
+再运行local.html
+
