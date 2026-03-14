@@ -21,7 +21,7 @@ func (h hub) run() {
 		select {
 		case c := <-h.r:
 			h.c[c] = true
-			c.data.Ip = c.ws.RemoteAdrr().String()
+			c.data.Ip = c.ws.RemoteAddr().String()
 			c.data.Type = "handshake"
 			c.data.UserList = user_list
 			data_b, _ := json.Marshal(c.data)
@@ -31,7 +31,7 @@ func (h hub) run() {
 				delete(h.c, c)
 				close(c.sc)
 			}
-		case c := <-h.b:
+		case data := <-h.b:
 			for c := range h.c {
 				select {
 				case c.sc <- data:
