@@ -40,13 +40,18 @@ import (
 
 func main() {
 	go hello()
+	fmt.Println("西瓜9毛一斤")
+	time.Sleep(time.Second)
 }
 func hello() {
 	fmt.Println("这瓜保甜吗")
-	time.Sleep(time.Second*10)
 }
 ```
+如果将time.Sleep(time.Second*)去掉，程序会直接退出，不输出 这瓜保甜吗 因为在程序启动时，go程序就会为main()函数创建一个默认的goroutine。当mian()函数返回的时候goroutine就结束了，所有在main()函数中启动的goroutine也会一同结束，所以我么用time.Sleep来等一下hello()
 
+还要注意的是 “西瓜9毛一斤” 在 “这瓜保甜吗”之前输出 因为创建goroutine 需要时间
+
+### 启动多个goroutine
 
 
 ## 2.runtime包
