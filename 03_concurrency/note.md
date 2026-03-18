@@ -52,9 +52,52 @@ func hello() {
 还要注意的是 “西瓜9毛一斤” 在 “这瓜保甜吗”之前输出 因为创建goroutine 需要时间
 
 ### 启动多个goroutine
+```go
+package main
 
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg = sync.WaitGroup{}
+	result := make(chan int, 5)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(v int) { // 这里的 v 只是一个局部拷贝
+			defer wg.Done()
+			result <- v
+		}(i) // 立即把当前的 i 传给参数 v
+	}
+	wg.Wait()
+	close(result)
+	for v := range result {
+		fmt.Println(v)
+	}
+}
+
+//如果有 100 个任务，但要求“每 3 个一组”有序执行，该怎么写？
+//有 3 个工位（Goroutine），每个工位处理一部分逻辑，数据像传送带一样通过 Channel 流向下一个工位。这就是著名的 Pipeline（流水线）模式。用代码展示一下
+
+```
+### 可增长的栈
+OS线程(操作系统线程)一般都有固定的栈内存1MB，一个goroutien栈内存在其生命周期开始时极小一般(2KB),goroutine 的栈内存极其不固定它可以按需增大和缩小，goroutine栈内存可达1GB
+### GMP模型
+GMP是go语言运行时(runtime)层面的实现，是go语言自己实现的一套调度系统。区别于操作系统调度OS线程。
+- G(goroutine) 写下的 go func() 包含栈内存，指令指针等信息 初始约为 2KB
+- M(Machine) 操作系统的物理线程 例如八核十六线程 每一个核映射两个线程 Goroutine最终要在Machine上运行
+- P(Processor) 管理一组goroutine队列，P里会存储当前goroutine运行的上下文环境(函数指针，堆栈地址及地址边界) P会对自己管理的goroutine做一些调度(比如把占用CPU时间较长的goroutine暂停运行后续的goroutine) 当自己队列消费完了就去全局队列里取 如果全局队列里也消费完了回去其他的P队列里抢任务。
+
+P与M一般也是一一对应的。P管理着一组G挂载在M上运行。当一个G长久阻塞在一个M上时，runtime会新建一个M，G所属的P会把G挂载在新建的M上 当旧的G阻塞完成或者认为其已经死掉时回收旧的M。
+
+P的个数是通过runtime.GOMAXPROCS设定(最大为256个)，Go1.5版本后默认为物理线程数。在并发量大的时候会增加一些P和M，但不会太多，切换的太频繁的话会得不偿失。
+
+但从线程上来讲，Goroutine是由runtime得调度器调度的，使用成为m:n调度的技术(复用/调度m个goroutine到n个OS线程)。其一大特点是goroutine的调度是在用户态下完成的，不涉及内核态与用户态之间的频繁切换，包括内存的分配与释放，都是在用户态维护着一块大的内存池，不直接调用系统对malloc函数(除非内存池也需要改变)，成本比调度OS线程低很多。另一方面充分利用了多核的硬件资源，近似的把若干goroutine均分在物理线程上，再加上goroutine的超轻量，以上种种保证了go调度的性能。
 
 ## 2.runtime包
+
+
 
 ## 3.Channel
 
