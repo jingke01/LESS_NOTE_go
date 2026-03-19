@@ -96,8 +96,32 @@ P的个数是通过runtime.GOMAXPROCS设定(最大为256个)，Go1.5版本后默
 但从线程上来讲，Goroutine是由runtime得调度器调度的，使用成为m:n调度的技术(复用/调度m个goroutine到n个OS线程)。其一大特点是goroutine的调度是在用户态下完成的，不涉及内核态与用户态之间的频繁切换，包括内存的分配与释放，都是在用户态维护着一块大的内存池，不直接调用系统对malloc函数(除非内存池也需要改变)，成本比调度OS线程低很多。另一方面充分利用了多核的硬件资源，近似的把若干goroutine均分在物理线程上，再加上goroutine的超轻量，以上种种保证了go调度的性能。
 
 ## 2.runtime包
+在学runtime之前，常常说go程序是从func main()开始的，其实在运行程序时runtime会先接管CPU 初始化系统检查你的CPU核心数线程数据此设置GOMAXPROCS 然后启动调度器创建第一个线程M0和第一个协程GO 然后启动垃圾回收器(GC)
 
+### runtime.Gosched()
+让出CPU时间片
+```go
+package main
 
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	runtime.GOMAXPROCS(1)
+
+	go func(s string) {
+		for i := 0; i < 2; i++ {
+			fmt.Println(s)
+		}
+	}("hello world") //主协程
+	for i := 0; i < 2; i++ {
+		//runtime.Gosched()
+		fmt.Println("Hello")
+	}
+}
+```
 
 ## 3.Channel
 
