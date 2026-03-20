@@ -1,20 +1,27 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"runtime"
+	"time"
 )
 
 func main() {
-	runtime.GOMAXPROCS(1)
+	context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	go func(s string) {
-		for i := 0; i < 2; i++ {
-			fmt.Println(s)
+	go func(ctx context.Context) {
+		for true {
+			select {
+			case <-ctx.Done():
+				fmt.Println("正在退出")
+				//runtime.Goexit()
+				return
+			default:
+				fmt.Println("正在工作")
+				time.Sleep(time.Second)
+			}
 		}
-	}("hello world") //主协程
-	for i := 0; i < 2; i++ {
-		//runtime.Gosched()
-		fmt.Println("Hello")
-	}
+	}(ctx)
+	time.Sleep(time.Second)
 }

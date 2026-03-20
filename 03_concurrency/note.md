@@ -122,6 +122,34 @@ func main() {
 	}
 }
 ```
+### runtime.Goexit()
+退出当前协程
+```go
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"time"
+)
+
+func main() {
+	go func() {
+		defer fmt.Println("A.defer")
+		func() {
+			defer fmt.Println("B.defer")
+			defer fmt.Println("C.defer")
+			runtime.Goexit() //结束协程
+			defer fmt.Println("D.defer")
+			fmt.Println("B")
+		}()
+		fmt.Println("A")
+
+	}()
+	time.Sleep(time.Second)//等待让goroutine能够创建成功
+}
+
+```
 
 ## 3.Channel
 
