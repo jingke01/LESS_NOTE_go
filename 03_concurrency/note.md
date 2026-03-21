@@ -150,8 +150,125 @@ func main() {
 }
 
 ```
+### runtime.GOMAXPROCS
+Go与形式的调度器使用GOMAXPROCS参数来确定需要使用多少OS线程来同时执行Go代码。默认为CPU的核心数。
+```go
+//通过将任务分配到不同的CPU逻辑核心上实现并行效果
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"time"
+)
+
+func a() {
+	for i := 0; i < 10; i++ {
+		fmt.Println("A:", i)
+	}
+}
+func b() {
+	for i := 0; i < 10; i++ {
+		fmt.Println("B:", i)
+	}
+}
+func main() {
+	runtime.GOMAXPROCS(2)
+	//runtime.GOMAXPROCS(1)
+	go a()
+	go b()
+	time.Sleep(time.Second * 1)
+}
+```
+goroutine和OS线程是多对多的关系，即m:n
 
 ## 3.Channel
+单纯地将函数并发执行是没有意义的。函数与函数之间需要交换数据才能体现并发现执行函数的意义。
+
+虽然可以使用共享内存的方式进行数据交换，但是共享内存在不同的goroutine中容易发生竞争问题。为了保证数据交换的正确性，必须使用互斥量堆内存进行加锁，这样的做法就会导致性能问题。
+
+Go语言的并发模型是GSP(Communication Sequential Processes)，提倡 通过通信共享内存而不是通过共享内存而实现通信。
+
+如果说goroutine是Go程序并发的执行体，channel就是它们之间的连接。channel是可以让一个goroutine发送特定值到另一个goroutine的通信机制。
+
+Go语言中的channel是一种特殊的类型。通道像一个传送带或者队列，总是遵循先进先出的规则，保证发送数据的顺序。每一个通道都是一个具体类型的导管，也就是申明channel的时候需要为其指定元素类型。
+
+ ```go
+    //创建管道
+    ch := make(chan int)    // 无缓冲管道
+    ch := make(chan int, 5) // 有缓冲管道（容量为5）
+	
+	//如果是无缓冲管道下面的代码能通过编译但会在运行时报错 管道被阻塞
+	//无缓冲管道也叫同步管道
+	ch <- 20//发送数据
+	a:=<-ch//接受数据
+	close(ch)//关闭管道
+```
+当通过管道发送有限的数据时，我们可以通过close函数关闭通道来告知从该管道就收值的goroutine停止等待。当通道被关闭时，从该通道发送值会引发panic，从该通道里接受的值一直是类型零值。如何判断一个管道是否被关闭了呢？
+```go
+package main
+
+import "fmt"
+
+func main() {
+	ch1 := make(chan int)
+	ch2 := make(chan int)
+	go func() {
+		for i := 0; i < 100; i++ {
+			ch1 <- i
+		}
+		close(ch1)
+	}()
+	go func() {
+		for true {
+			i, ok := <-ch1//用断言判断channel是否关闭
+			if !ok {
+				break
+			}
+			ch2 <- i * i
+		}
+		close(ch2)
+	}()
+	go func() {
+		for i := range ch2 {
+			fmt.Println(i) //通道关闭后自然退出
+		}
+	}()
+}
+```
+### 单向管道
+有时候我们会将channel作为参数在多个任务函数之间传递，很多时候我们在不同的任务函数中使用channel对其进行限制，比如限制channel在函数中只能发送或接受。
+```go
+package main
+
+import "fmt"
+
+func counter(out chan<- int) {
+	for i := 0; i < 10; i++ {
+		out <- i
+	}
+	close(out)
+}
+func squarer(out chan<- int, in <-chan int) {
+	for i := range in {
+		out <- i * i
+	}
+	close(out)
+}
+func printer(in <-chan int) {
+	for i := range in {
+		fmt.Println(i)
+	}
+}
+func main() {
+	ch1 := make(chan int)
+	ch2 := make(chan int)
+	go counter(ch1)
+	go squarer(ch2, ch1)
+	printer(ch2)
+}
+```
+
 
 ## 4.Goroutine池
 
