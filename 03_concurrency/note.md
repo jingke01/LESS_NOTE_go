@@ -268,9 +268,15 @@ func main() {
 	printer(ch2)
 }
 ```
-
+    out chan<- int, in <-chan int
+    out 只发送         in  只接收
 
 ## 4.Goroutine池
+
+### worker pool
+本质上是生产者消费者模型，可以有效控制goroutine数量，防爆涨
+
+
 
 ## 5.定时器
 
