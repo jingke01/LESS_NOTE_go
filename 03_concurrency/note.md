@@ -275,10 +275,122 @@ func main() {
 
 ### worker pool
 本质上是生产者消费者模型，可以有效控制goroutine数量，防爆涨
+```go
+package main
 
+import (
+	"fmt"
+	"math/rand"
+	"sync"
+)
 
+type Job struct {
+	Id      int
+	RandNum int
+}
+type Result struct {
+	job *Job
+	sum int
+}
+
+func main() {
+	var wg = sync.WaitGroup{}
+	jobChan := make(chan *Job, 128)
+	resultChan := make(chan *Result, 128)
+	creatPool(10, jobChan, resultChan, &wg)
+	var PrintWg = sync.WaitGroup{}
+	PrintWg.Add(1)
+	go func() {
+		defer PrintWg.Done()
+		for result := range resultChan {
+			fmt.Printf("job id %v randnum %d result %d \n", result.job.Id, result.job.RandNum, result.sum)
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		job := &Job{
+			Id:      i,
+			RandNum: rand.Intn(1000),
+		}
+		jobChan <- job
+	}
+	wg.Wait()
+	close(jobChan)
+	close(resultChan)
+	PrintWg.Wait()
+	fmt.Println("over")
+	//time.Sleep(time.Second)
+}
+func creatPool(num int, jobChan chan *Job, resultChan chan *Result, wg *sync.WaitGroup) {
+	for i := 0; i < num; i++ {
+		go func() {
+			for job := range jobChan {
+				r_num := job.RandNum
+				var sum = 0
+				for r_num != 0 {
+					sum += r_num % 10
+					r_num /= 10
+				}
+				resultChan <- &Result{
+					job: job,
+					sum: sum,
+				}
+				wg.Done()
+			}
+		}()
+	}
+}
+```
 
 ## 5.定时器
+当执行time.NewTimer(time.Second)时，Go在后台启动了一个倒计时。C本质上是一个类型为chan time.Time的管道。
+```go
+package main
+
+func main() {
+	//timer基本使用
+	//timer1 := time.NewTimer(2 * time.Second)
+	//t1 := time.Now()
+	//fmt.Printf("t1: %v\n", t1)
+	//t2 := <-timer1.C
+	//fmt.Printf("t2: %v\n", t2)
+
+	//2.验证time只能响应一次
+	//time2 := time.NewTimer(time.Second)
+	//for true {
+	//	<-time2.C
+	//	fmt.Println("time is up")
+	//}
+
+	//3.timer实现延时的功能
+	//time.Sleep(time.Second) 				//法一
+	//
+	//time3 := time.NewTimer(2 * time.Second)
+	//<-time3.C 								//法二
+	//fmt.Println("time to 2s")
+	//
+	//<-time.After(2*time.Second)
+	//fmt.Println("time to 2s")			//法三
+
+	//4.停止定时器
+	//time4 := time.NewTimer(time.Second)
+	//go func() {
+	//	<-time4.C
+	//	fmt.Println("timer done")
+	//}()
+	//stop := time4.Stop()
+	//if stop {
+	//	fmt.Println("timer closed")
+	//}
+
+	//5.重置定时器
+	//timer5 := time.NewTimer(time.Second)
+	//timer5.Reset(time.Second)
+	//fmt.Println(time.Now())
+	//fmt.Println(<-timer5.C)
+}
+```
+
 
 ## 6.select
 
