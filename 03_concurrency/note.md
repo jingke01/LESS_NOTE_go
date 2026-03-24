@@ -390,10 +390,67 @@ func main() {
 	//fmt.Println(<-timer5.C)
 }
 ```
+```go
+package main
 
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	//创建一个周期性的定时器，按照设定的时间间隔向管道ticker.C发送当前时间
+	ticker := time.NewTicker(time.Second) 
+	defer ticker.Stop()
+	done := make(chan bool)
+	go func() {
+		i := 0
+		for t := range ticker.C {
+			i++
+			fmt.Println(t)
+			if i == 5 {
+				done <- true
+				return
+			}
+		}
+	}()
+	<-done
+	fmt.Println("Ticker stopped")
+}
+```
 
 ## 6.select
+### select多路复用
+select的使用类似于switch语句 它有一系列case分支和一个默认的分支 每个case会对应一个通道的通信(接受或发送)过程 select会一直等待 知道某个case的通信操作完成时 就会执行case分支对应的语句 
+```go
+package main
 
+import (
+	"fmt"
+)
+
+func test1(ch chan string) {
+	//time.Sleep(time.Second * 5)
+	ch <- "test1"
+}
+func test2(ch chan string) {
+	//time.Sleep(time.Second * 2)
+	ch <- "test2"
+}
+func main() {
+	output1 := make(chan string)
+	output2 := make(chan string)
+	go test1(output1)
+	go test2(output2)
+	select {
+	case s1 := <-output1:
+		fmt.Println(s1)
+	case s2 := <-output2:
+		fmt.Println(s2)
+	}
+}
+//可以监听多个管道 两个管道同时有东西随机输出一个
+```
 ## 7.并发安全和锁
 
 ## 8.
