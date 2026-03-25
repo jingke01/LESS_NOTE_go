@@ -451,6 +451,93 @@ func main() {
 }
 //可以监听多个管道 两个管道同时有东西随机输出一个
 ```
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	output1 := make(chan string, 3)
+	go write(output1)
+	for s := range output1 {
+		fmt.Println("res:", s)
+		time.Sleep(time.Second * 2)
+	}
+}
+func write(ch chan string) {
+	for {
+		select {
+		//写数据
+		case ch <- "hello":
+			fmt.Println("write hello")
+		default:
+			fmt.Println("channel full")
+		}
+		time.Sleep(time.Second)
+	}
+}
+//判断管道是否存满
+```
+
 ## 7.并发安全和锁
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+var x = 0
+var wg = sync.WaitGroup{}
+
+func add() {
+	for i := 0; i < 5000; i++ { //试一下其他值比较小的时候不影响
+		x += 1
+	}
+	wg.Done()
+}
+func main() {
+	wg.Add(2)
+	go add()
+	go add()
+	wg.Wait()
+	fmt.Println(x)
+}
+```
+### 互斥锁
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+var x = 0
+var wg = sync.WaitGroup{}
+var lock = sync.Mutex{} //mutex互斥
+
+func add() {
+	for i := 0; i < 5000; i++ {
+		lock.Lock()
+		x += 1
+		lock.Unlock()
+	}
+	wg.Done()
+}
+func main() {
+	wg.Add(2)
+	go add()
+	go add()
+	wg.Wait()
+	fmt.Println(x)
+}
+
+```
+有的锁很快就会释放，所以Mutex会先尝试自旋 (让CPU空转几圈这样待会更容易抢到) 如果等了一会儿还没拿到 才会真正进入阻塞 把CPU资源让给别人
 
 ## 8.
