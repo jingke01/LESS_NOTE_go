@@ -550,55 +550,6 @@ func main() {
 解决方法：1.写优先 2.公平锁(按照请求的先后顺序FIFO分配锁)
 
 ```go
-// package main
-//
-// import (
-//
-//	"fmt"
-//	"sync"
-//	"time"
-//
-// )
-//
-// var (
-//
-//	x      int32
-//	wg     sync.WaitGroup
-//	rwlock sync.RWMutex
-//
-// )
-//
-//	func write() {
-//		defer wg.Done()
-//		rwlock.Lock() //加写锁
-//		defer rwlock.RUnlock()
-//		x += 1
-//		fmt.Println("write")
-//		time.Sleep(time.Millisecond * 500)
-//		rwlock.RUnlock()
-//
-// }
-//
-//	func read() {
-//		rwlock.RLock()
-//		fmt.Println("read")
-//		time.Sleep(time.Second)
-//		rwlock.RUnlock()
-//		wg.Done()
-//	}
-//
-// func main() {
-//
-//		for i := 0; i < 10; i++ {
-//			wg.Add(1)
-//			go write()
-//		}
-//		for i := 0; i < 10; i++ {
-//			wg.Add(1)
-//			go read()
-//		}
-//		wg.Wait()
-//	}
 package main
 
 import (
@@ -647,4 +598,3 @@ func main() {
 }
 
 ```
-## 8.
