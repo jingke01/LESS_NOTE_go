@@ -57,3 +57,50 @@ for file in "$@";do
   fi
 done
 ```
+通配符 ? 匹配一个 * 匹配多个
+
+{} 有一系列公共子串可以用{}把不同的地方括起来 系统会自动展开
+
+```shell
+convert image.{png,jpg}
+# 会展开为
+convert image.png image.jpg
+
+cp /path/to/project/{foo,bar,baz}.sh /newpath
+# 会展开为
+cp /path/to/project/foo.sh /path/to/project/bar.sh /path/to/project/baz.sh /newpath
+
+# 也可以结合通配使用
+mv *{.py,.sh} folder
+# 会移动所有 *.py 和 *.sh 文件
+
+mkdir foo bar
+
+# 下面命令会创建 foo/a, foo/b, ... foo/h, bar/a, bar/b, ... bar/h 这些文件
+touch {foo,bar}/{a..h}
+touch foo/x bar/y
+# 比较文件夹 foo 和 bar 中包含文件的不同
+diff <(ls foo) <(ls bar)
+# 输出
+# < x
+# ---
+# > y
+```
+
+下载tldr
+```shell
+# 下载二进制文件 (适用于大多数 64 位 Linux)
+wget https://github.com/dbrgn/tealdeer/releases/latest/download/tealdeer-linux-x86_64-musl -O /usr/local/bin/tldr
+
+# 赋予执行权限
+chmod +x /usr/local/bin/tldr
+
+# 刷新 bash 缓存
+hash -r
+
+# 更新缓存（tealdeer 的更新命令是 --update）
+tldr --update
+
+# 测试
+tldr tar
+```
